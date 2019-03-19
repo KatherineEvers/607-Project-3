@@ -1,0 +1,58 @@
+---
+title: "607 Project 3"
+author: "Katherine Evers"
+date: "3/18/2019"
+output: html_document
+---
+
+```{r results='hide', message=FALSE, warning=FALSE}
+library("tidyverse")  
+library("rvest")    
+library("stringi")   
+library("xml2")
+library("kableExtra")
+```
+
+```{r}
+#Import url
+url <- "https://www.indeed.com/jobs?q=%22data%20scientist%22&l=Silicon%20Valley%2C%20CA"
+#read page
+page <- read_html(url)
+
+#Extract job titles
+jobTitle <- page %>% 
+  html_nodes("div") %>%
+  html_nodes(xpath = '//a[@data-tn-element = "jobTitle"]') %>%
+  html_attr("title")
+
+#Extract company names
+companyName <- page %>% 
+  html_nodes("span")  %>% 
+  html_nodes(xpath = '//*[@class="company"]')  %>% 
+  html_text() %>%
+  stri_trim_both() -> company.name 
+
+#Extract job posting links  
+links <- page %>% 
+  html_nodes("div") %>%
+  html_nodes(xpath = '//*[@data-tn-element="jobTitle"]') %>%
+  html_attr("href")
+
+#Extract job descriptions  
+jobDescription <- c()
+for(i in seq_along(links)) {
+  url <- paste0("https://indeed.com/", links[i])
+  page <- read_html(url)
+  jobDescription[[i]] <- page %>%
+    html_nodes("span")  %>% 
+    html_nodes(xpath = '//*[@class="jobsearch-JobComponent-description icl-u-xs-mt--md"]') %>% 
+    html_text() %>%
+    stri_trim_both()
+}
+  
+#Create dataframe  
+df <- data.frame(jobTitle, companyName, jobDescription)
+  
+DT::datatable(df, editable = TRUE)
+
+```
