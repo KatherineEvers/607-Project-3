@@ -50,9 +50,27 @@ for(i in seq_along(links)) {
     stri_trim_both()
 }
   
-#Create dataframe  
-df <- data.frame(jobTitle, companyName, jobDescription)
-  
+#Create dataframe (NOTE: stringsasfactors is false here)
+df <- data.frame(jobTitle, companyName, jobDescription, stringsAsFactors = FALSE)
+
 DT::datatable(df, editable = TRUE)
 
+#tidytext code
+jobcorpus_tb<-tibble(eachjob = seq_along(df$jobDescription), text = df$jobDescription)
+
+
+jobcorpus_tb %>%
+  unnest_tokens(word, text)  %>% 
+  anti_join(stop_words) %>% 
+  group_by(word) %>%
+  count(sort = TRUE) %>%
+  ungroup() %>%
+  top_n(20) %>%
+  ggplot(aes(x = fct_reorder(word, n), y = n)) +
+  geom_bar(stat = "identity", width = 0.5) + 
+  xlab(NULL) +
+  coord_flip() +
+  ylab("Word Frequency") +
+  ggtitle("Most Common Corpus Words") +
+  theme(legend.position = "none")
 ```
