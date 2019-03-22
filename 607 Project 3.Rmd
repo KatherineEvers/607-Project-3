@@ -51,12 +51,12 @@ for(i in seq_along(links)) {
     stri_trim_both()
 }
 
-#######################################################New code#######################################################
+######################################################## *New code* #######################################################
 ```{r}
 url <- "https://www.indeed.com/jobs?q=data+scientist&jt=fulltime"
 page <- read_html(url)
 
-# location urls
+#location urls
 location <- page %>% 
   html_nodes("li") %>%
   html_nodes(xpath = '//*[@rel="nofollow"]') %>%
@@ -66,8 +66,8 @@ location <- page %>%
 location2 <- location[c(9:13)] 
 
 
-pageStart <- 10 # starting page 
-pageEnd <- 20 # last page results
+pageStart <- 10 # 1st page results
+pageEnd <- 90 # 10th page results
 pageResults <- seq(from = pageStart, to = pageEnd, by = 10)
  
 fullDf <- data.frame()
