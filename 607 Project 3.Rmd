@@ -83,7 +83,7 @@ for(j in 1:5) {
     url<-rbind(url, url2)
   }}
 
-for(i in 1:9) {
+for(i in 2:length(url)) {
   url <- url[i]
   page <- read_html(url)
 
