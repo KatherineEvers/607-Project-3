@@ -13,7 +13,7 @@ library("xml2")
 library("kableExtra")
 ```
 
-########################################################Old code#####################################################
+######################################################## Old web scraping code #####################################################
 ```{r}
 #Import url
 url <- "https://www.indeed.com/jobs?q=%22data%20scientist%22&l=Silicon%20Valley%2C%20CA"
@@ -51,46 +51,50 @@ for(i in seq_along(links)) {
     stri_trim_both()
 }
 
-######################################################## *New code* #######################################################
+#################################################### *New final web scraping code* #####################################################
 ```{r}
+#Import url (indeed search results for full time data sceintist positions)
 url <- "https://www.indeed.com/jobs?q=data+scientist&jt=fulltime"
 page <- read_html(url)
 
-#location urls
+#Extract urls from left side of page
 location <- page %>% 
   html_nodes("li") %>%
   html_nodes(xpath = '//*[@rel="nofollow"]') %>%
   html_attr("href")
 
-#Extract top 5 locations based on indexes
-location2 <- location[c(9:13)] 
+#Extract top 5 location urls based on indexes
+location2 <- location[c(8:12)] 
+```
 
-
-pageStart <- 10 # 1st page results
+```{r}
+pageStart <- 10 # 2nd page results
 pageEnd <- 90 # 10th page results
 pageResults <- seq(from = pageStart, to = pageEnd, by = 10)
- 
 
+#Create dataframe of search page result urls
 url<-c()
-for(j in 1:5) {
-  
+for(i in 1:5) {
   baseUrl <- "https://www.indeed.com"
-  url1 <- paste(baseUrl, location2[j], sep="")
-  
+  #Filter results by location
+  url1 <- paste(baseUrl, location2[i], sep="")
+  #Go to next page
   for(i in seq_along(pageResults)) {
     url2 <- paste0(url1, "&start=", pageResults[i])
-    
-    url<-rbind(url, url2)
+    url<-rbind(url, url1, url2)
   }}
-  
-url <- unique(url)  
 
-#Create dataframe of job titles, locations, and summaries
+url <- unique(url)
+
+#Create dataframe of job titles, locations, and summaries from url dataframe
+#Create an empty dataframe
 fullDf <- data.frame()
 
-for(i in 2:length(url)) {
-  url <- url[i]
-  page <- read_html(url)
+#Use a for loop to collect data
+for(i in url) {
+  
+  #Visit each url in url dataframe
+  page <- html_session(i)
 
   #Extract job titles
   jobTitle <- page %>% 
@@ -112,20 +116,24 @@ for(i in 2:length(url)) {
     html_text() %>%
     stri_trim_both() -> job.location
     
-  #get the short sumary
+  #Extract job summaries
   jobSummary <- page %>% 
     html_nodes("span")  %>% 
     html_nodes(xpath = '//*[@class="summary"]')  %>% 
     html_text() %>%
     stri_trim_both() -> summary.short 
-    
-    df <- data.frame(jobTitle, companyName, jobLocation, jobSummary)
+  
+  #Put data in a dataframe  
+  df <- data.frame(jobTitle, companyName, jobLocation, jobSummary)
+  #Add dataframe to starting dataframe
   fullDf <- rbind(fullDf, df)
-} #Error: 'NA' does not exist in current working directory
+}
 
+#Display table
 DT::datatable(fullDf, editable = TRUE)
-```
 
+```
+################################################## tidy text #########################################################
   
 #Create dataframe (NOTE: stringsasfactors is false here)
 df <- data.frame(jobTitle, companyName, jobDescription, stringsAsFactors = FALSE)
