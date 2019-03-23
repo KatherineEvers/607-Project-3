@@ -136,7 +136,8 @@ DT::datatable(fullDf, editable = TRUE)
 ################################################## tidy text #########################################################
   
 #Create dataframe (NOTE: stringsasfactors is false here)
-df <- data.frame(jobTitle, companyName, jobDescription, stringsAsFactors = FALSE)
+#df <- data.frame(jobTitle, companyName, jobDescription, stringsAsFactors = FALSE)
+df <- data.frame(lapply(fullDf, as.character), stringsAsFactors=FALSE)
 
 DT::datatable(df, editable = TRUE)
 
