@@ -15,7 +15,6 @@ library("kableExtra")
 
 ######################################################## Old web scraping code #####################################################
 ```{r}
-
 #Import url
 url <- "https://www.indeed.com/jobs?q=%22data%20scientist%22&l=Silicon%20Valley%2C%20CA"
 #read url
@@ -52,10 +51,7 @@ for(i in seq_along(links)) {
     stri_trim_both()
 }
 
-```
-
 #################################################### *New final web scraping code* #####################################################
-
 ```{r}
 #Import url (indeed search results for full time data sceintist positions)
 url <- "https://www.indeed.com/jobs?q=data+scientist&jt=fulltime"
@@ -126,19 +122,11 @@ for(i in url) {
     html_nodes(xpath = '//*[@class="summary"]')  %>% 
     html_text() %>%
     stri_trim_both() -> summary.short 
-
-  lenJobTitle <- length(jobTitle)
-  lenCompanyName <- length(companyName)
-  lenJobLocation <- length(jobLocation)
-  lenJobSummary <- length(jobSummary)
   
-  if (lenJobTitle == lenCompanyName & lenJobLocation == lenJobSummary & lenCompanyName == lenJobLocation) {
-    #Put data in a dataframe  
-    df <- data.frame(jobTitle, companyName, jobLocation, jobSummary)
-    #Add dataframe to starting dataframe
-    fullDf <- rbind(fullDf, df)
-  }
-  
+  #Put data in a dataframe  
+  df <- data.frame(jobTitle, companyName, jobLocation, jobSummary)
+  #Add dataframe to starting dataframe
+  fullDf <- rbind(fullDf, df)
 }
 
 #Display table
@@ -171,23 +159,4 @@ jobcorpus_tb %>%
   ylab("Word Frequency") +
   ggtitle("Most Common Corpus Words") +
   theme(legend.position = "none")
-
-```{r}
-#install.packages("RODBC")
-library(RODBC)
-library("getPass")
-
-#write.csv(fullDf, "fullDf.csv")
-
-#Azure cloud sql data
-connectionString <- getPass("Connection String")
-conn <- odbcDriverConnect(connection=connectionString)
-sqlQuery <- "SELECT [jobTitle],[companyName],[jobLocation],[jobSummary] FROM [dbo].[fullDf]"
-conn <- odbcDriverConnect(connectionString)
-dfSqlData <- sqlQuery(conn, sqlQuery)
-close(conn) # don't leak connections !
-
-DT::datatable(dfSqlData, editable = FALSE)
-
 ```
-
