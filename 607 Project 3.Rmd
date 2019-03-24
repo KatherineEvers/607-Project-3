@@ -122,7 +122,7 @@ jobcorpus_tb %>%
   group_by(word) %>%
   count(sort = TRUE) %>%
   ungroup() %>%
-  top_n(20) %>%
+  top_n(40) %>%
   ggplot(aes(x = fct_reorder(word, n), y = n)) +
   geom_bar(stat = "identity", width = 0.5) + 
   xlab(NULL) +
