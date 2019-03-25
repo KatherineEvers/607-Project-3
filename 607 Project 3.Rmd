@@ -269,4 +269,10 @@ wordcloud(words = skill_ranking$skills, freq = skill_ranking$perc, random.order=
           colors=brewer.pal(8, "Dark2"))
 ```
 
+##Conclusion
+By counting the frequency of skill buzz word appeared in 744 data scientist job descriptions, we found that :     
+1. Overall valued general skill is 'Machine learning'.
+2. Overall valued technical skill is 'Python'
+
+
 
