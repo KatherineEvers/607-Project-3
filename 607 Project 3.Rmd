@@ -11,9 +11,23 @@ library("rvest")
 library("stringi")   
 library("xml2")
 library("kableExtra")
+library(RCurl)
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(tm)
+library(wordcloud)
+library(tidytext)
+library(xtable)
+library(readr)
+library(tidytext)
+library(knitr)
+library(phrasemachine)
+library(quanteda)
+library(tidyr)
 ```
 
-#################################################### *New final web scraping code* #####################################################
+##Web scrape
 
 ```{r}
 #Import url (indeed search results for full time data sceintist positions)
@@ -104,17 +118,13 @@ for(i in url) {
 DT::datatable(fullDf, editable = TRUE)
 
 ```
-################################################## tidy text #########################################################
+##Tidy text 
   
 #Create dataframe (NOTE: stringsasfactors is false here)
-#df <- data.frame(jobTitle, companyName, jobDescription, stringsAsFactors = FALSE)
 df <- data.frame(lapply(fullDf, as.character), stringsAsFactors=FALSE)
-
-DT::datatable(df, editable = TRUE)
 
 #tidytext code
 jobcorpus_tb<-tibble(eachjob = seq_along(df$jobSummary), text = df$jobSummary)
-
 
 jobcorpus_tb %>%
   unnest_tokens(word, text)  %>% 
@@ -131,6 +141,7 @@ jobcorpus_tb %>%
   ggtitle("Most Common Corpus Words") +
   theme(legend.position = "none")
 
+## Cloud Database Storage and reading
 ```{r}
 #install.packages("RODBC")
 library(RODBC)
@@ -149,4 +160,138 @@ close(conn) # don't leak connections !
 DT::datatable(dfSqlData, editable = FALSE)
 
 ```
+
+##Data Cleaning
+
+```{r}
+fullDf = read.csv('fullDf.csv')
+fullDf$jobSummary <- iconv(fullDf$jobSummary,"WINDOWS-1252","UTF-8")
+```
+
+##Connecting noun phrase
+```{r}
+# test  = phrasemachine(head(fullDf$jobSummary),
+#                          minimum_ngram_length = 2,
+#                          maximum_ngram_length = 2,
+#                          return_phrase_vectors = TRUE,
+#                          return_tag_sequences = TRUE)
+
+```
+
+#### Load data as a corpus
+```{r}
+jobdesc = VCorpus(VectorSource(fullDf$jobSummary))
+##inspect(jobdesc)
+```
+
+#### Text transformation
+######Transformation is performed using tm_map() function to replace / remove unneeded words, numbers and punctuations.
+```{r}
+toSpace <- content_transformer(function (x , pattern ) gsub(pattern, " ", x))
+jobdesc <- tm_map(jobdesc, toSpace, "/") %>%
+            tm_map(toSpace, "@") %>%
+            tm_map(toSpace, "\\|") %>%
+            tm_map(content_transformer(tolower)) %>%  ### transform to lower case
+            tm_map(removeNumbers)%>%   ### remove numbers in job description
+            tm_map(removeWords, stopwords("english"))%>% ### Remove english common stopwords
+            tm_map(removePunctuation) %>%       # Remove punctuations
+            tm_map(stripWhitespace)# Eliminate extra white spaces
+            # tm_map(stemDocument)
+```
+
+##### Word frequence analysis
+```{r}
+word_freq<- TermDocumentMatrix(jobdesc)%>%
+                  as.matrix()%>%
+                  rowSums()%>%
+                  sort(decreasing=TRUE)
+
+wf_df = data.frame(word = names(word_freq),freq=word_freq)
+wf_df
+```
+#### Word frequency plot
+```{r}
+ggplot(head(wf_df, 40), aes(reorder(word, freq),freq)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  labs(title = "Frequency of Indeed Data Scientist Job Postings",
+       x = "Words", y = "Frequency") +
+  coord_flip()
+```
+
+#### Word Cloud
+```{r}
+set.seed(1234)
+wordcloud(words = wf_df$word, freq = wf_df$freq, min.freq = 20,
+          max.words=200, random.order=FALSE, rot.per=0.35, 
+          colors=brewer.pal(8, "Dark2"))
+```
+## Technical/General skill analysis
+#### identify if the skill exist in job description
+```{r}
+fullDf = fullDf %>%
+  mutate(R = grepl("\\bR\\b,", jobSummary , ignore.case = TRUE)) %>%   #### Technical skills
+    mutate(python = grepl("Python", jobSummary, ignore.case=TRUE)) %>%
+    mutate(SQL = grepl("SQL", jobSummary, ignore.case=TRUE)) %>%
+    mutate(hadoop = grepl("hadoop", jobSummary, ignore.case=TRUE)) %>%
+    mutate(perl = grepl("perl", jobSummary, ignore.case=TRUE)) %>%
+    mutate(sas = grepl("sas", jobSummary, ignore.case=TRUE)) %>%
+    mutate(aws = grepl("aws", jobSummary, ignore.case=TRUE)) %>%
+    mutate(excel = grepl("excel", jobSummary, ignore.case=TRUE)) %>%
+    mutate(nosql = grepl("nosql", jobSummary, ignore.case=TRUE)) %>%
+    mutate(linux = grepl("linux", jobSummary, ignore.case=TRUE)) %>%
+    mutate(azure = grepl("Azure", jobSummary, ignore.case=TRUE)) %>%
+    mutate(matplotlib = grepl("matplotlib", jobSummary, ignore.case=TRUE)) %>%
+    mutate(Cplusplus = grepl("C++", jobSummary, fixed=TRUE)) %>%
+    mutate(VB = grepl("VB", jobSummary, ignore.case=TRUE)) %>%
+    mutate(java = grepl("java\\b", jobSummary, ignore.case=TRUE)) %>%
+    mutate(scala = grepl("scala", jobSummary, ignore.case=TRUE)) %>%
+    mutate(tensorflow = grepl("tensorflow|\\btf\\b", jobSummary, ignore.case=TRUE)) %>%
+    mutate(javascript = grepl("javascript", jobSummary, ignore.case=TRUE)) %>%
+    mutate(spark = grepl("spark", jobSummary, ignore.case=TRUE))%>%
+    mutate(bi = grepl("(\\bbi\\b|business intelligence)", jobSummary, ignore.case=TRUE))%>%
+    mutate(ml = grepl("(\\bml\\b|machine learning)", jobSummary, ignore.case=TRUE))%>%  ### general skills
+    mutate(stat = grepl("statis", jobSummary, ignore.case=TRUE))%>%
+    mutate(visual = grepl("visual", jobSummary, ignore.case=TRUE))%>%
+    mutate(deep_learn = grepl("(deep learning|neural net)", jobSummary, ignore.case=TRUE))%>%
+    mutate(nlp = grepl("(nlp|nature language )", jobSummary, ignore.case=TRUE))%>%
+    mutate(math = grepl("(mathematics)", jobSummary, ignore.case=TRUE))%>%
+    mutate(AI = grepl("(artificial intelligence|ai)", jobSummary, ignore.case=TRUE))%>%
+    mutate(software_dev = grepl("software development|software engineer", jobSummary, ignore.case=TRUE))%>%
+    mutate(analysis = grepl("(analysis)", jobSummary, ignore.case=TRUE))%>%
+    mutate(cs = grepl("(computer science)", jobSummary, ignore.case=TRUE))%>%
+    mutate(project_management = grepl("project management", jobSummary, ignore.case=TRUE))%>%
+    mutate(cs = grepl("(computer science)", jobSummary, ignore.case=TRUE))%>%
+    mutate(data_engineer = grepl("data engineering", jobSummary, ignore.case=TRUE))
+```
+
+
+##### Skill Frequency
+```{r}
+skill_unlist= gather(fullDf[,c(6:37)],skills,Number,1:32, factor_key = TRUE)
+
+skill_ranking=aggregate(skill_unlist$Number, by=list(skill_unlist$skills), FUN=mean)
+names(skill_ranking) = c('skills','perc')
+```
+
+```{r}
+ggplot(skill_ranking, aes(reorder(skills, perc),perc)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  labs(title = "Frequency of Indeed Data Scientist Job Postings",
+       x = "skills", y = "Frequency / total posting") +
+  coord_flip()
+```
+
+
+```{r}
+set.seed(1234)
+wordcloud(words = skill_ranking$skills, freq = skill_ranking$perc, random.order=FALSE, rot.per=0.35, 
+          colors=brewer.pal(8, "Dark2"))
+```
+
+##Conclusion
+By counting the frequency of skill buzz word appeared in 744 data scientist job descriptions, we found that :     
+1. Overall valued general skill is 'Machine learning'.
+2. Overall valued technical skill is 'Python'
+
+
 
