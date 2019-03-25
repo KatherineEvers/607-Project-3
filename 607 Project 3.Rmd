@@ -27,7 +27,7 @@ library(quanteda)
 library(tidyr)
 ```
 
-##New final web scraping code
+##Web scrape
 
 ```{r}
 #Import url (indeed search results for full time data sceintist positions)
@@ -118,6 +118,28 @@ for(i in url) {
 DT::datatable(fullDf, editable = TRUE)
 
 ```
+##Tidy text 
+  
+#Create dataframe (NOTE: stringsasfactors is false here)
+df <- data.frame(lapply(fullDf, as.character), stringsAsFactors=FALSE)
+
+#tidytext code
+jobcorpus_tb<-tibble(eachjob = seq_along(df$jobSummary), text = df$jobSummary)
+
+jobcorpus_tb %>%
+  unnest_tokens(word, text)  %>% 
+  anti_join(stop_words) %>% 
+  group_by(word) %>%
+  count(sort = TRUE) %>%
+  ungroup() %>%
+  top_n(40) %>%
+  ggplot(aes(x = fct_reorder(word, n), y = n)) +
+  geom_bar(stat = "identity", width = 0.5) + 
+  xlab(NULL) +
+  coord_flip() +
+  ylab("Word Frequency") +
+  ggtitle("Most Common Corpus Words") +
+  theme(legend.position = "none")
 
 ## Cloud Database Storage and reading
 ```{r}
@@ -138,7 +160,6 @@ close(conn) # don't leak connections !
 DT::datatable(dfSqlData, editable = FALSE)
 
 ```
-
 
 ##Data Cleaning
 
@@ -196,8 +217,6 @@ ggplot(head(wf_df, 40), aes(reorder(word, freq),freq)) +
        x = "Words", y = "Frequency") +
   coord_flip()
 ```
-
-
 
 #### Word Cloud
 ```{r}
