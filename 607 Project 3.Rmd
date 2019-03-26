@@ -22,13 +22,14 @@ library(xtable)
 library(readr)
 library(tidytext)
 library(knitr)
-library(phrasemachine)
+# library(phrasemachine)
 library(quanteda)
 library(tidyr)
 ```
 
-##Web scrape
+##New final web scraping code
 
+####Extract location url
 ```{r}
 #Import url (indeed search results for full time data sceintist positions)
 url <- "https://www.indeed.com/jobs?q=data+scientist&jt=fulltime"
@@ -41,17 +42,20 @@ location <- page %>%
   html_attr("href")
 
 #Extract top 5 location urls based on indexes
-location2 <- location[c(8:12)] 
+# location2 <- location[c(8:12)] 
+location2 <- location[c(8:21)] 
 ```
 
+#####Scraping process####
 ```{r}
 pageStart <- 10 # 2nd page results
-pageEnd <- 90 # 10th page results
+pageEnd <- 160 # 17th page results
 pageResults <- seq(from = pageStart, to = pageEnd, by = 10)
 
 #Create dataframe of search page result urls
 url<-c()
-for(i in 1:5) {
+# for(i in 1:5) {
+for(i in 1:13) {
   baseUrl <- "https://www.indeed.com"
   #Filter results by location
   url1 <- paste(baseUrl, location2[i], sep="")
@@ -72,19 +76,34 @@ for(i in url) {
   
   #Visit each url in url dataframe
   page <- html_session(i)
+  
+  ##test 
+  salary <- page %>% 
+    html_nodes("div.paddedSummary") 
+    
+  jobsalary<-salary %>%
+    map_chr(. %>%     
+    html_nodes("span.salary.no-wrap")%>%
+    html_text() %>%
+    first()%>%
+    stri_trim_both()
+  )
+
 
   #Extract job titles
   jobTitle <- page %>% 
     html_nodes("div") %>%
     html_nodes(xpath = '//*[@data-tn-element="jobTitle"]') %>%
     html_attr("title")
-    
+  
   #Extract company names
   companyName <- page %>% 
     html_nodes("span")  %>% 
     html_nodes(xpath = '//*[@class="company"]')  %>% 
     html_text() %>%
     stri_trim_both() -> company.name 
+
+  
   
   #Extract job locations
   jobLocation <- page %>% 
@@ -100,14 +119,20 @@ for(i in url) {
     html_text() %>%
     stri_trim_both() -> summary.short 
 
+  
+  
   lenJobTitle <- length(jobTitle)
   lenCompanyName <- length(companyName)
   lenJobLocation <- length(jobLocation)
   lenJobSummary <- length(jobSummary)
+  lenJobSalary <- length(jobsalary)
   
-  if (lenJobTitle == lenCompanyName & lenJobLocation == lenJobSummary & lenCompanyName == lenJobLocation) {
+  if (lenJobTitle == lenCompanyName & 
+      lenJobLocation == lenJobSummary & 
+      lenCompanyName == lenJobLocation & 
+      lenJobSalary== lenJobLocation) {
     #Put data in a dataframe  
-    df <- data.frame(jobTitle, companyName, jobLocation, jobSummary)
+    df <- data.frame(jobTitle,jobsalary, companyName, jobLocation, jobSummary)
     #Add dataframe to starting dataframe
     fullDf <- rbind(fullDf, df)
   }
@@ -116,30 +141,9 @@ for(i in url) {
 
 #Display table
 DT::datatable(fullDf, editable = TRUE)
+write.csv(fullDf, "fullDf.csv")
 
 ```
-##Tidy text 
-  
-#Create dataframe (NOTE: stringsasfactors is false here)
-df <- data.frame(lapply(fullDf, as.character), stringsAsFactors=FALSE)
-
-#tidytext code
-jobcorpus_tb<-tibble(eachjob = seq_along(df$jobSummary), text = df$jobSummary)
-
-jobcorpus_tb %>%
-  unnest_tokens(word, text)  %>% 
-  anti_join(stop_words) %>% 
-  group_by(word) %>%
-  count(sort = TRUE) %>%
-  ungroup() %>%
-  top_n(40) %>%
-  ggplot(aes(x = fct_reorder(word, n), y = n)) +
-  geom_bar(stat = "identity", width = 0.5) + 
-  xlab(NULL) +
-  coord_flip() +
-  ylab("Word Frequency") +
-  ggtitle("Most Common Corpus Words") +
-  theme(legend.position = "none")
 
 ## Cloud Database Storage and reading
 ```{r}
@@ -147,7 +151,7 @@ jobcorpus_tb %>%
 library(RODBC)
 library("getPass")
 
-#write.csv(fullDf, "fullDf.csv")
+
 
 #Azure cloud sql data
 connectionString <- getPass("Connection String")
@@ -160,6 +164,7 @@ close(conn) # don't leak connections !
 DT::datatable(dfSqlData, editable = FALSE)
 
 ```
+
 
 ##Data Cleaning
 
@@ -218,11 +223,13 @@ ggplot(head(wf_df, 40), aes(reorder(word, freq),freq)) +
   coord_flip()
 ```
 
+
+
 #### Word Cloud
 ```{r}
 set.seed(1234)
-wordcloud(words = wf_df$word, freq = wf_df$freq, min.freq = 20,
-          max.words=200, random.order=FALSE, rot.per=0.35, 
+wordcloud(words = wf_df$word, freq = wf_df$freq, min.freq = 100,
+          max.words=2000, random.order=FALSE, rot.per=0.35, 
           colors=brewer.pal(8, "Dark2"))
 ```
 ## Technical/General skill analysis
