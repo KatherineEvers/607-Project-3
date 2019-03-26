@@ -2,17 +2,23 @@
 title: "607 Project 3"
 author: "Katherine Evers"
 date: "3/18/2019"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
 
 ```{r results='hide', message=FALSE, warning=FALSE}
-library("tidyverse")  
-library("rvest")    
-library("stringi")   
+library("tidyverse")
+library("rvest")
+library("stringi")
 library("xml2")
 library("kableExtra")
 library(RCurl)
 library(plyr)
+library(RColorBrewer)
 library(dplyr)
 library(ggplot2)
 library(tm)
@@ -22,11 +28,16 @@ library(xtable)
 library(readr)
 library(tidytext)
 library(knitr)
-
+library(phrasemachine)
+library(quanteda)
+library(tidyr)
+library(scales)
+library(forcats)
 ```
 
 ##New final web scraping code
 
+####Extract location url
 ```{r}
 #Import url (indeed search results for full time data sceintist positions)
 url <- "https://www.indeed.com/jobs?q=data+scientist&jt=fulltime"
@@ -39,17 +50,20 @@ location <- page %>%
   html_attr("href")
 
 #Extract top 5 location urls based on indexes
-location2 <- location[c(8:12)] 
+# location2 <- location[c(8:12)] 
+location2 <- location[c(8:21)]   ### All locations
 ```
 
+#####Scraping process####
 ```{r}
-pageStart <- 10 # 2nd page results
-pageEnd <- 90 # 10th page results
+pageStart <- 10  # 2nd page results
+pageEnd   <- 170 # 30th page results
 pageResults <- seq(from = pageStart, to = pageEnd, by = 10)
 
 #Create dataframe of search page result urls
 url<-c()
-for(i in 1:5) {
+# for(i in 1:5) {
+for(i in 1:13) {
   baseUrl <- "https://www.indeed.com"
   #Filter results by location
   url1 <- paste(baseUrl, location2[i], sep="")
@@ -65,55 +79,98 @@ url <- unique(url)
 #Create an empty dataframe
 fullDf <- data.frame()
 
+
 #Use a for loop to collect data
 for(i in url) {
-  
   #Visit each url in url dataframe
   page <- html_session(i)
+  ##test
+  salary <- page %>%
+    html_nodes("div.paddedSummary")
+
+  jobsalary<-salary %>%
+    map_chr(. %>%
+    html_nodes("span.salary.no-wrap")%>%
+    html_text() %>%
+    first()%>%
+    stri_trim_both()
+  )
+
 
   #Extract job titles
-  jobTitle <- page %>% 
+  jobTitle <- page %>%
     html_nodes("div") %>%
     html_nodes(xpath = '//*[@data-tn-element="jobTitle"]') %>%
     html_attr("title")
-    
+
   #Extract company names
-  companyName <- page %>% 
-    html_nodes("span")  %>% 
-    html_nodes(xpath = '//*[@class="company"]')  %>% 
+  companyName <- page %>%
+    html_nodes("span")  %>%
+    html_nodes(xpath = '//*[@class="company"]')  %>%
     html_text() %>%
-    stri_trim_both() -> company.name 
-  
+    stri_trim_both() -> company.name
+
+
+
   #Extract job locations
-  jobLocation <- page %>% 
-    html_nodes("span") %>% 
-    html_nodes(xpath = '//*[@class="location"]')%>% 
+  jobLocation <- page %>%
+    html_nodes("span") %>%
+    html_nodes(xpath = '//*[@class="location"]')%>%
     html_text() %>%
     stri_trim_both() -> job.location
-    
+
   #Extract job summaries
-  jobSummary <- page %>% 
-    html_nodes("span")  %>% 
-    html_nodes(xpath = '//*[@class="summary"]')  %>% 
+  jobSummary <- page %>%
+    html_nodes("span")  %>%
+    html_nodes(xpath = '//*[@class="summary"]')  %>%
     html_text() %>%
-    stri_trim_both() -> summary.short 
+    stri_trim_both() -> summary.short
+
+  # get links
+  links <- page %>%
+    html_nodes("div") %>%
+    html_nodes(xpath = '//*[@data-tn-element="jobTitle"]') %>%
+    html_attr("href")
+
+  job_description <- c()
+  for(lk in seq_along(links)) {
+    job_url <- paste0("https://indeed.com/", links[lk])
+    page <- html_session(job_url)
+    desc <-page %>%
+            html_nodes("span")  %>%
+            html_nodes(xpath = '//*[@class="jobsearch-JobComponent-description icl-u-xs-mt--md"]') %>%
+            html_text() %>%
+            stri_trim_both()
+    if (identical(desc,character(0))) {
+      job_description[[lk]] <- ''
+    }
+    else{job_description[[lk]] <- desc}
+  }
+
 
   lenJobTitle <- length(jobTitle)
   lenCompanyName <- length(companyName)
   lenJobLocation <- length(jobLocation)
   lenJobSummary <- length(jobSummary)
-  
-  if (lenJobTitle == lenCompanyName & lenJobLocation == lenJobSummary & lenCompanyName == lenJobLocation) {
-    #Put data in a dataframe  
-    df <- data.frame(jobTitle, companyName, jobLocation, jobSummary)
+  lenJobSalary <- length(jobsalary)
+  lenJobDesc <- length(job_description)
+
+
+  if (lenJobTitle == lenCompanyName &
+      lenJobLocation == lenJobSummary &
+      lenCompanyName == lenJobLocation &
+      lenJobSalary== lenJobLocation &
+      lenJobDesc== lenJobLocation) {
+    #Put data in a dataframe
+    df <- data.frame(jobTitle,jobsalary, companyName, jobLocation, jobSummary,job_description)
     #Add dataframe to starting dataframe
     fullDf <- rbind(fullDf, df)
   }
-  
 }
 
 #Display table
 DT::datatable(fullDf, editable = TRUE)
+write.csv(fullDf, "fullDf.csv")
 
 ```
 
@@ -122,8 +179,6 @@ DT::datatable(fullDf, editable = TRUE)
 #install.packages("RODBC")
 library(RODBC)
 library("getPass")
-
-#write.csv(fullDf, "fullDf.csv")
 
 #Azure cloud sql data
 connectionString <- getPass("Connection String")
@@ -134,16 +189,201 @@ dfSqlData <- sqlQuery(conn, sqlQuery)
 close(conn) # don't leak connections !
 
 DT::datatable(dfSqlData, editable = FALSE)
-
 ```
 
 
 ##Data Cleaning
 
 ```{r}
-fullDf$jobSummary<- iconv(fullDf$jobSummary,"WINDOWS-1252","UTF-8")%>%
-  tolower()
-
-fullDf
+fullDf = read.csv('fullDf.csv')
+fullDf$job_description <- iconv(fullDf$job_description,"WINDOWS-1252","UTF-8")
 ```
+
+#### Text transformation
+######Transformation is performed using tm_map() function to replace / remove unneeded words, numbers and punctuations.
+```{r}
+jobdesc = VCorpus(VectorSource(fullDf$job_description))
+toSpace <- content_transformer(function (x , pattern ) gsub(pattern, " ", x))
+jobdesc <- tm_map(jobdesc, toSpace, "/") %>%
+            tm_map(toSpace, "@") %>%
+            tm_map(toSpace, "\\|") %>%
+            tm_map(content_transformer(tolower)) %>%  ### transform to lower case
+            tm_map(removeNumbers)%>%   ### remove numbers in job description
+            tm_map(removeWords, stopwords("english"))%>% ### Remove english common stopwords
+            tm_map(removePunctuation) %>%       # Remove punctuations
+            tm_map(stripWhitespace)# Eliminate extra white spaces
+            # tm_map(stemDocument)
+```
+
+##### Word frequence analysis
+```{r}
+word_freq<- TermDocumentMatrix(jobdesc)%>%
+                  as.matrix()%>%
+                  rowSums()%>%
+                  sort(decreasing=TRUE)
+
+wf_df = data.frame(word = names(word_freq),freq=word_freq)
+wf_df
+```
+#### Word frequency plot
+```{r}
+ggplot(head(wf_df, 40), aes(reorder(word, freq),freq,fill=freq)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Frequency of Indeed Data Scientist Job Postings",
+       x = "Words", y = "Frequency") +
+  coord_flip()
+```
+
+
+
+#### Word Cloud
+```{r}
+set.seed(1234)
+wordcloud(words = wf_df$word, freq = wf_df$freq, min.freq = 1000,
+          max.words=16000, random.order=FALSE, rot.per=0.35,
+          colors=brewer.pal(8, "Dark2"))
+```
+## Technical/General skill analysis
+#### identify if the skill exist in job description
+```{r}
+fullDf = fullDf %>%
+  mutate(R = grepl("\\bR\\b,", job_description , ignore.case = TRUE)) %>%   #### Technical skills
+    mutate(python = grepl("python", job_description, ignore.case=TRUE)) %>%
+    mutate(SQL = grepl("SQL", job_description, ignore.case=TRUE)) %>%
+    mutate(hadoop = grepl("hadoop", job_description, ignore.case=TRUE)) %>%
+    mutate(perl = grepl("perl", job_description, ignore.case=TRUE)) %>%
+    mutate(C = grepl("\\bC\\b", job_description, ignore.case=TRUE)) %>%
+    mutate(aws = grepl("aws", job_description, ignore.case=TRUE)) %>%
+    mutate(excel = grepl("excel", job_description, ignore.case=TRUE)) %>%
+    mutate(nosql = grepl("nosql", job_description, ignore.case=TRUE)) %>%
+    mutate(linux = grepl("linux", job_description, ignore.case=TRUE)) %>%
+    mutate(azure = grepl("Azure", job_description, ignore.case=TRUE)) %>%
+    mutate(sas = grepl("\\bsas\\b", job_description, ignore.case=TRUE)) %>%
+    mutate(Cplusplus = grepl("C++", job_description, fixed=TRUE)) %>%
+    mutate(VB = grepl("VB", job_description, ignore.case=TRUE)) %>%
+    mutate(java = grepl("java\\b", job_description, ignore.case=TRUE)) %>%
+    mutate(csharp = grepl("(\\bc#\\b)", job_description, ignore.case=TRUE))%>%
+    mutate(scala = grepl("scala", job_description, ignore.case=TRUE)) %>%
+    mutate(tensorflow = grepl("tensorflow|\\btf\\b", job_description, ignore.case=TRUE)) %>%
+    mutate(javascript = grepl("javascript", job_description, ignore.case=TRUE)) %>%
+    mutate(spark = grepl("spark", job_description, ignore.case=TRUE))%>%
+    mutate(bi = grepl("(\\bbi\\b|business intelligence)", job_description, ignore.case=TRUE))%>%
+    mutate(ml = grepl("(\\bml\\b|machine learning)", job_description, ignore.case=TRUE))%>%  ### general skills
+    mutate(stat = grepl("statis", job_description, ignore.case=TRUE))%>%
+    mutate(visual = grepl("visual", job_description, ignore.case=TRUE))%>%
+    mutate(deep_learn = grepl("(deep learning|neural net)", job_description, ignore.case=TRUE))%>%
+    mutate(nlp = grepl("(nlp|nature language )", job_description, ignore.case=TRUE))%>%
+    mutate(math = grepl("(mathematics)", job_description, ignore.case=TRUE))%>%
+    mutate(AI = grepl("(artificial intelligence|\\bai\\b)", job_description, ignore.case=TRUE))%>%
+    mutate(software_dev = grepl("software development|software engineer", job_description, ignore.case=TRUE))%>%
+    mutate(analysis = grepl("(analysis)", job_description, ignore.case=TRUE))%>%
+    mutate(project_management = grepl("project management", job_description, ignore.case=TRUE))%>%
+    mutate(data_engineer = grepl("data engineering", job_description, ignore.case=TRUE))
+```
+
+
+##### Skill Frequency
+```{r}
+skill_unlist= gather(fullDf[,c(8:39)],skills,Number,1:32, factor_key = TRUE)
+
+skill_ranking=aggregate(skill_unlist$Number, by=list(skill_unlist$skills), FUN=mean)
+names(skill_ranking) = c('skills','perc')
+```
+
+
+```{r}
+ggplot(skill_ranking, aes(reorder(skills, perc),perc,,fill=perc)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Frequency of Skills Indeed Data Scientist Job Postings",
+       x = "skills", y = "Frequency / total posting") +
+  coord_flip()+
+  geom_text(aes(label= round(perc,2)), position=position_dodge(width=2),size=3,hjust=-0.1)
+```
+
+```{r}
+set.seed(1234)
+wordcloud(words = skill_ranking$skills, freq = skill_ranking$perc, random.order=FALSE, rot.per=0.35,
+          colors=brewer.pal(8, "Dark2"))
+```
+
+## Salary
+#### Salary Analysis
+```{r}
+salary_ls =do.call(rbind,strsplit(as.character(fullDf$jobsalary),'-',1))
+fullDf['salary_lower'] = unlist(as.numeric(gsub("\\$([0-9]+).*$",'\\1',salary_ls[,1])))
+fullDf['salary_higher'] = unlist(as.numeric(gsub("\\$([0-9]+).*$",'\\1',salary_ls[,2])))
+fullDf['salary_unit'] = ifelse(grepl('\\byear\\b',fullDf$jobsalary,ignore.case = TRUE),'year',ifelse(grepl('\\bhour\\b',fullDf$jobsalary,ignore.case = TRUE),'hour',NA))
+```
+#### Unify salary unit
+```{r}
+fullDf=fullDf%>%
+  mutate(salary_lower_unified = as.numeric(fullDf$salary_lower)*ifelse(fullDf$salary_unit == 'year', 1000,  ifelse(fullDf$salary_unit == 'hour',37.5*52,NA)),
+         salary_higher_unified = as.numeric(fullDf$salary_higher)*ifelse(fullDf$salary_unit == 'year', 1000, ifelse(fullDf$salary_unit == 'hour',37.5*52,NA)))
+
+```
+#### Calculate average unified salary
+```{r}
+fullDf = fullDf %>%
+          mutate(mean_salary_unified = (salary_lower_unified+salary_higher_unified)/2)
+```
+
+#### Average salary of each skills
+```{r}
+skill_salary= gather(fullDf[,c(8:39,45)],skills,Number,1:32, factor_key = TRUE)%>%
+        filter(Number==TRUE & !is.na(mean_salary_unified) & mean_salary_unified!=275000)%>%   ### Remove salary outlier
+        select(skills,mean_salary_unified)
+head(skill_salary)
+
+```
+
+### Salary distribution by skills
+#### Salary boxplot
+```{r}
+p<-ggplot(skill_salary,
+          aes(x= reorder(skill_salary$skills, skill_salary$mean_salary_unified, FUN = mean), y=mean_salary_unified,color=skills)) + 
+          geom_boxplot() + 
+          coord_flip()+
+          xlab('Skills')+
+          ylab('Salary')
+p
+```
+
+#### Mean Salary Ranking
+```{r}
+skill_mean_salary=aggregate(skill_salary$mean_salary_unified, by=list(skill_salary$skills), FUN=mean)%>%
+  arrange(desc(x))
+names(skill_mean_salary) = c('skills','Mean_salary')
+ggplot(skill_mean_salary, aes(reorder(skills, Mean_salary),Mean_salary,fill=Mean_salary)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Frequency of Indeed Data Scientist Job Postings",
+       x = "skills", y = "Frequency / total posting") +
+  coord_flip()+
+  geom_text(aes(label=round(Mean_salary)), position=position_dodge(width=2),size=3)
+  
+```
+
+## Demand V.S Salary
+```{r}
+demand_salary=merge(skill_mean_salary ,skill_ranking,by='skills')
+
+ggplot(demand_salary, aes(x=Mean_salary,y=perc,color=skills)) +
+  geom_point()+
+  geom_text(aes(label=skills), position=position_dodge(width=2),size=3,hjust=-0.1)+
+  geom_line() +
+  geom_hline(yintercept = mean(demand_salary$perc), color="blue")+
+  geom_vline(xintercept = mean(demand_salary$Mean_salary), color="blue")+
+  xlab('Average Salary')+
+  ylab('Demand')
+  
+  
+```
+
+
+
+
+##Conclusion
+By counting the frequency of skill buzz word appeared in 744 data scientist job descriptions, we found that :
+1. Overall valued general skill is 'Machine learning'.
+2. Overall valued technical skill is 'Python'
+
 
